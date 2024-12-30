@@ -1,0 +1,33 @@
+{
+    "name": "finviz-screener",
+    "version": "1.0.0",
+    "description": "A project to scrape Finviz data using Puppeteer.",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "keywords": [
+        "finviz",
+        "puppeteer",
+        "scraper",
+        "stock",
+        "screener"
+    ],
+    "author": "James De Santiago",
+    "license": "MIT",
+    "dependencies": {
+        "csv-writer": "^1.6.0",
+        "dotenv": "^16.3.1",
+        "gaxios": "^6.7.1",
+        "googleapis": "^144.0.0",
+        "gtoken": "^7.1.0",
+        "moment-timezone": "^0.5.46",
+        "puppeteer": "^23.11.1",
+        "puppeteer-extra": "^3.3.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2",
+        "winston": "^3.17.0"
+    },
+    "overrides": {
+        "node-fetch": "^3.0.0"
+    }
+}
