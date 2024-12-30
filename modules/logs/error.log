@@ -1,0 +1,7 @@
+2024-12-29 22:00:09 [ERROR]: Global Error: ENOENT: no such file or directory, open 'C:\Users\james\Python\Biotech Trading Strategy\FinVizScreener\finviz-scraper-account@finvizscraper-446220.iam.gserviceaccount.com'
+2024-12-30 09:59:44 [ERROR]: All 3 attempts failed: Navigation timeout of 30000 ms exceeded
+2024-12-30 09:59:44 [ERROR]: Global Error: Navigation timeout of 30000 ms exceeded
+2024-12-30 10:01:45 [ERROR]: Error navigating to next page: Cannot read properties of undefined (reading 'length')
+2024-12-30 11:36:22 [ERROR]: Global Error: page.waitForTimeout is not a function
+2024-12-30 11:38:35 [ERROR]: Global Error: page.waitForTimeout is not a function
+2024-12-30 11:43:43 [ERROR]: Global Error: page.waitForTimeout is not a function
