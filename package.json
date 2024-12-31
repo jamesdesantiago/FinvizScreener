@@ -28,6 +28,6 @@
         "winston": "^3.17.0"
     },
     "overrides": {
-        "node-fetch": "^3.0.0"
+        "node-fetch": "2.6.7"
     }
 }
