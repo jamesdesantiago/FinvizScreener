@@ -2,7 +2,7 @@
 
 async function loginToFinviz(page) {
     // Navigate to the login page
-    await page.goto('https://finviz.com/login.ashx', { waitUntil: 'networkidle2' });
+    await page.goto('https://finviz.com/login.ashx', { waitUntil: 'domcontentloaded' });
   
     const emailSelector = 'input[name=email]';
     const passwordSelector = 'input[name=password]';
