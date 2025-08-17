@@ -6,8 +6,8 @@ async function loginToFinviz(page) {
   
     const emailSelector = 'input[name=email]';
     const passwordSelector = 'input[name=password]';
-    const loginButtonSelector = 'body > div.content > div > div > form > input';
-  
+    const loginButtonSelector = 'button[type=submit]';
+
     // Type in email
     await page.waitForSelector(emailSelector, { timeout: 5000 });
     await page.type(emailSelector, process.env.FINVIZ_EMAIL, { delay: 50 });
