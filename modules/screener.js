@@ -3,6 +3,12 @@ const { sanitizeFilename, retryOperation, getRandomDelay } = require('./utils');
 const { logger } = require('./logger'); // Import logger
 
 /**
+ * Delay function to introduce pauses between operations.
+ * @param {number} ms - The number of milliseconds to wait.
+ */
+const delay = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
  * Scrapes data from a given Finviz screener URL.
  * @param {puppeteer.Page} page - The Puppeteer page instance.
  * @param {string} screenerURL - The URL of the screener to scrape.
@@ -10,15 +16,16 @@ const { logger } = require('./logger'); // Import logger
  * @returns {Object} - An object containing headers and rows of scraped data.
  */
 async function scrapeScreenerData(page, screenerURL, screenerName) {
-  logger.info(`Starting scrape for URL: ${screenerURL}`);
-  
+  //logger.info(`Starting scrape for URL: ${screenerURL}`);
+  logger.info(`Starting scrape for screener: ${screenerName}`);
+
   try {
     // Navigate to the screener URL with retry
     await retryOperation(() => page.goto(screenerURL, { waitUntil: 'domcontentloaded', timeout: 60000 }), 3, 2000);
     logger.info(`Navigated to ${screenerURL}`);
     
     // Introduce a random delay after navigation
-    await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
+    await delay(getRandomDelay());
 
     // Define selectors
     const tableSelector = '#screener-table > td > table > tbody > tr > td > table';
@@ -68,7 +75,7 @@ async function scrapeScreenerData(page, screenerURL, screenerName) {
     }, tableSelector), 3, 2000);
     
     // Introduce a random delay after data extraction
-    await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
+    await delay(getRandomDelay());
 
     // Handle pagination if necessary
     let combinedRows = [...tableData.rows];
@@ -91,9 +98,8 @@ async function scrapeScreenerData(page, screenerURL, screenerName) {
           logger.info('Navigated to next page.');
     
           // Introduce a random delay after navigation
-          await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
+          await delay(getRandomDelay());
 
-    
           // Scrape data from the new page with retry
           const newTableData = await retryOperation(() => page.evaluate((selector) => {
             const table = document.querySelector(selector);
@@ -109,7 +115,6 @@ async function scrapeScreenerData(page, screenerURL, screenerName) {
             };
           }, tableSelector), 3, 2000);
     
-          // Ensure `newTableData.rows` is defined
           if (newTableData && Array.isArray(newTableData.rows)) {
             logger.info(`Scraped ${newTableData.rows.length} rows from next page.`);
             combinedRows.push(...newTableData.rows);
@@ -137,6 +142,27 @@ async function scrapeScreenerData(page, screenerURL, screenerName) {
   }
 }
 
+/**
+ * Main function to process screeners with delays between each.
+ */
+async function processScreeners(page, screenersList) {
+  for (const screener of screenersList) {
+    logger.info(`\n===== Running Screener: ${screener.name} =====`);
+    try {
+      const screenerData = await scrapeScreenerData(page, screener.url, screener.name);
+      logger.info(`Scraped ${screenerData.rows.length} rows from ${screener.name}.`);
+
+      // Add a random delay after each screener
+      const delayTime = Math.floor(Math.random() * 5000) + 2000; // Random delay between 2-7 seconds
+      logger.info(`Pausing for ${delayTime / 1000} seconds before the next screener...`);
+      await delay(delayTime);
+    } catch (error) {
+      logger.error(`Error processing screener ${screener.name}: ${error.message}`);
+    }
+  }
+}
+
 module.exports = {
   scrapeScreenerData,
+  processScreeners,
 };

@@ -10,135 +10,132 @@ const { runAdvancedActions } = require('./modules/advancedActions');
 const { logger } = require('./modules/logger');
 const { captureScreenshot } = require('./modules/screenshotHelper');
 const { sanitizeFilename, retryOperation, getRandomDelay } = require('./modules/utils');
+const { wasTradingDay } = require('./modules/isMarketOpen');
 const moment = require('moment-timezone');
 
 (async () => {
-  let browser;
-  const combinedData = []; // Array to hold all data from all screeners
-  const allHeaders = new Set(['Timestamp', 'Screener']); // Add Timestamp and Screener columns
+  // 1) Check if today is a trading day, but allow an override for testing
+  const today = new Date();
+  const override = process.env.MARKET_OVERRIDE === 'true';
 
-  // Initialize Google Sheets API authentication
+  // Await the market status check
+  if (!override && !(await wasTradingDay(today))) {
+    logger.warn('🚫 Market is CLOSED today. Exiting script.');
+    console.log('🚫 Market is CLOSED today. Exiting script.');
+    return;
+  }
+
+  console.log(override ? '🔧 MARKET_OVERRIDE enabled. Running script anyway.' : '✅ Market is OPEN. Proceeding...');
+  logger.info(override ? '🔧 MARKET_OVERRIDE enabled. Running script anyway.' : '✅ Market is OPEN. Proceeding...');
+
+  let browser, context;
+  const combinedData = [];
+  const allHeaders = new Set(['Timestamp', 'Screener']); 
+
+  // 2) Initialize Google Sheets API Auth
   const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY, // Path to the JSON key file
+    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
   try {
-    // 1. Launch Browser
-    logger.info('Launching browser...');
-    browser = await launchBrowser();
+    // 3) Launch Browser
+    logger.info('🚀 Launching browser...');
+    ({ browser, context } = await launchBrowser());
 
-    // 2. Create a new page
-    const page = await browser.newPage();
+    // 4) Create a fresh page
+    const page = await context.newPage();
 
-    // 3. Go to Finviz homepage with retry
-    logger.info('Navigating to Finviz homepage...');
-    await retryOperation(() => page.goto('https://finviz.com', { waitUntil: 'domcontentloaded' }), 3, 2000);
-    await captureScreenshot(page, 'after_navigating_to_finviz.png');
-    logger.info('Finviz homepage loaded.');
+    // 5) Go to Finviz homepage with retry
+    logger.info('🌎 Navigating to Finviz homepage...');
+    await retryOperation(
+      () => page.goto('https://finviz.com', { waitUntil: 'networkidle0' }),
+      3,
+      2000
+    );
+    logger.info('✅ Finviz homepage loaded.');
 
-    // 4. Handle privacy banner with random delay
-    logger.info('Handling privacy banner...');
+    // 6) Handle privacy banner, random delay
+    logger.info('🛑 Checking for privacy banner...');
     await handlePrivacyBanner(page);
-    await captureScreenshot(page, 'after_privacy_banner.png');
-    await new Promise(resolve => setTimeout(resolve, getRandomDelay())); // Random delay
-    logger.info('Privacy banner handled.');
+    await new Promise(res => setTimeout(res, getRandomDelay()));
+    logger.info('✅ Privacy banner handled.');
 
-    // 5. Log in with retry and random delay
-    logger.info('Logging in to Finviz...');
+    // 7) Log in with retry + random delay
+    logger.info('🔐 Logging in to Finviz...');
     await retryOperation(() => loginToFinviz(page), 3, 2000);
-    await captureScreenshot(page, 'after_login.png');
-    await new Promise(resolve => setTimeout(resolve, getRandomDelay())); // Random delay
-    logger.info('Logged in successfully!');
+    await new Promise(res => setTimeout(res, getRandomDelay()));
+    logger.info('✅ Logged in successfully!');
 
-    // 6. Run multiple screeners
+    // 8) Iterate over multiple screeners
     for (const screener of screenersList) {
-      logger.info(`\n===== Running Screener: ${screener.name} =====`);
-
-      // Navigate to the screener and scrape data with retry
-      logger.info(`Navigating to screener URL: ${screener.url}`);
+      logger.info(`\n===== 📊 Running Screener: ${screener.name} =====`);
+      // logger.info(`🔍 Navigating to screener URL: ${screener.url}`);
 
       try {
-        const { headers, rows } = await retryOperation(() => scrapeScreenerData(page, screener.url, screener.name), 3, 2000);
+        const { headers, rows } = await retryOperation(
+          () => scrapeScreenerData(page, screener.url, screener.name),
+          3,
+          2000
+        );
 
         if (rows.length === 0) {
-          logger.info(`No data found for screener: ${screener.name}. Skipping to next screener.`);
-          continue; // Skip to the next screener
+          logger.warn(`⚠️ No data found for screener: ${screener.name}. Skipping.`);
+          continue;
         }
 
-        logger.info(`Scraped ${rows.length} rows from ${screener.name}.`);
-
-        // Update headers set with new headers from this screener
+        logger.info(`📊 Scraped ${rows.length} rows from ${screener.name}.`);
         headers.forEach(header => allHeaders.add(header));
 
-        // Add timestamp and screener name to each row and format data
+        // Add timestamp & screener name to each row
         const timestamp = moment().tz('America/New_York').format('YYYY-MM-DD HH:mm:ss');
         const formattedData = rows.map(row => {
           const rowObj = { Timestamp: timestamp, Screener: screener.name };
-          headers.forEach((header, index) => {
-            rowObj[header] = row[index] || ''; // Handle missing data
+          headers.forEach((h, idx) => {
+            rowObj[h] = row[idx] || '';
           });
           return rowObj;
         });
 
-        // Combine data
         combinedData.push(...formattedData);
+        logger.info(`✅ Data for ${screener.name}: ${formattedData.length} rows`);
 
-        // Log or store your data
-        logger.info(`Data for ${screener.name}: ${formattedData.length} rows`);
-
-        // If screener has advanced logic, run it with random delay
         if (screener.requiresAdvancedLogic) {
           await runAdvancedActions(page, formattedData, screener);
-          await new Promise(resolve => setTimeout(resolve, getRandomDelay())); // Random delay
+          await new Promise(res => setTimeout(res, getRandomDelay()));
         }
 
-        // Introduce a random delay after each screener
-        await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
-
+        await new Promise(res => setTimeout(res, getRandomDelay()));
 
       } catch (screenerError) {
-        logger.error(`Error running screener ${screener.name}: ${screenerError.message}`);
-        // await captureScreenshot(page, `error_${sanitizeFilename(screener.name)}.png`);
-        // Continue to next screener even if there's an error
+        logger.error(`❌ Error running screener ${screener.name}: ${screenerError.message}`);
       }
     }
 
-    // 7. Prepare headers array for Google Sheets
+    // 9) Prepare the data for Google Sheets
     const headersArray = Array.from(allHeaders);
-
-    // 8. Ensure all data objects have consistent keys
     const formattedCombinedData = combinedData.map(row => {
-      const formattedRow = {};
-      headersArray.forEach(header => {
-        formattedRow[header] = row[header] || ''; // Fill missing fields with empty strings
+      const rowObj = {};
+      headersArray.forEach(h => {
+        rowObj[h] = row[h] || '';
       });
-      return formattedRow;
+      return rowObj;
     });
 
-    // 9. Append combined data to Google Sheets
     if (formattedCombinedData.length > 0) {
       const sheetId = process.env.GOOGLE_SHEET_ID;
-
-      // Pass the auth client to the appendToGoogleSheet function
       await appendToGoogleSheet(formattedCombinedData, sheetId, await auth.getClient());
-      logger.info('Data successfully appended to Google Sheets.');
+      logger.info('📤 Data successfully appended to Google Sheets.');
     } else {
-      logger.info('No data scraped from any screener.');
+      logger.info('⚠️ No data scraped from any screener.');
     }
+
   } catch (err) {
-    logger.error(`Global Error: ${err.message}`);
-    if (browser) {
-      const pages = await browser.pages();
-      const page = pages.length > 0 ? pages[0] : null;
-      if (page) {
-        await captureScreenshot(page, 'error_global.png'); // Capture screenshot on global error
-      }
-    }
+    logger.error(`❌ Global Error: ${err.message}`);
   } finally {
     if (browser) {
       await browser.close();
-      logger.info('Browser closed.');
+      logger.info('🛑 Browser closed.');
     }
   }
 })();

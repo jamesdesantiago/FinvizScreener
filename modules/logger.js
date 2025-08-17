@@ -1,4 +1,5 @@
 // modules/logger.js
+
 const fs = require('fs');
 const path = require('path');
 const { createObjectCsvWriter } = require('csv-writer');
@@ -14,22 +15,33 @@ if (!fs.existsSync(logsDir)) {
 
 // Initialize Winston logger
 const logger = createLogger({
-  level: 'info', // Set the minimum log level to 'info'
+  // Accept debug (and above) to allow "Allowed"/"Blocked" logs at debug level
+  level: 'debug',
   format: format.combine(
-    format.timestamp({
-      format: 'YYYY-MM-DD HH:mm:ss' // Timestamp format
-    }),
-    format.printf(info => `${info.timestamp} [${info.level.toUpperCase()}]: ${info.message}`)
+    format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    format.printf(
+      info => `${info.timestamp} [${info.level.toUpperCase()}]: ${info.message}`
+    )
   ),
   transports: [
-    // - Write all logs with level 'error' and below to 'error.log'
-    new transports.File({ filename: path.join(logsDir, 'error.log'), level: 'error' }),
-    
-    // - Write all logs with level 'info' and below to 'combined.log'
-    new transports.File({ filename: path.join(logsDir, 'combined.log') }),
-    
-    // - Also log to the console
-    new transports.Console(),
+    // 1) Write only errors to error.log
+    new transports.File({
+      filename: path.join(logsDir, 'error.log'),
+      level: 'error',
+    }),
+
+    // 2) Write debug+ (debug, info, warn, error) to combined.log
+    //    so "Allowed" / "Blocked" lines will appear here
+    new transports.File({
+      filename: path.join(logsDir, 'combined.log'),
+      level: 'debug',
+    }),
+
+    // 3) Show only warn and error on the console
+    //    (debug and info won't clutter the console)
+    new transports.Console({
+      level: 'info',
+    }),
   ],
 });
 
